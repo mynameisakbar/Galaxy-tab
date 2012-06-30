@@ -1,10 +1,3 @@
-/*!
- * reveal.js 1.3
- * http://lab.hakim.se/reveal-js
- * MIT licensed
- * 
- * Copyright (C) 2012 Hakim El Hattab, http://hakim.se
- */
 var Reveal = (function(){
 	
 	var HORIZONTAL_SLIDES_SELECTOR = '#reveal .slides>section',
@@ -37,23 +30,37 @@ var Reveal = (function(){
 		dom = {},
 
 		// Detect support for CSS 3D transforms
-		supports3DTransforms =  document.body.style['perspectiveProperty'] !== undefined ||
-								document.body.style['WebkitPerspective'] !== undefined || 
+		supports3DTransforms =  document.body.style['WebkitPerspective'] !== undefined || 
                         		document.body.style['MozPerspective'] !== undefined ||
                         		document.body.style['msPerspective'] !== undefined ||
-                        		document.body.style['OPerspective'] !== undefined,
+                        		document.body.style['OPerspective'] !== undefined ||
+                        		document.body.style['perspective'] !== undefined,
         
-        supports2DTransforms =  document.body.style['transformProperty'] !== undefined ||
-								document.body.style['WebkitTransform'] !== undefined || 
+        supports2DTransforms =  document.body.style['WebkitTransform'] !== undefined || 
                         		document.body.style['MozTransform'] !== undefined ||
                         		document.body.style['msTransform'] !== undefined ||
-                        		document.body.style['OTransform'] !== undefined,
+                        		document.body.style['OTransform'] !== undefined ||
+                        		document.body.style['transform'] !== undefined,
+
+        // Detect support for elem.classList
+        supportsClassList = !!document.body.classList;
 		
 		// Throttles mouse wheel navigation
 		mouseWheelTimeout = 0,
 
 		// Delays updates to the URL due to a Chrome thumbnailer bug
-		writeURLTimeout = 0;
+		writeURLTimeout = 0,
+
+		// Holds information about the currently ongoing touch input
+		touch = {
+			startX: 0,
+			startY: 0,
+			startSpan: 0,
+			startCount: 0,
+			handled: false,
+			threshold: 40
+		};
+	
 	
 	/**
 	 * Starts up the slideshow by applying configuration
@@ -61,10 +68,10 @@ var Reveal = (function(){
 	 */
 	function initialize( options ) {
 		
-		if( !supports2DTransforms && !supports3DTransforms ) {
+		if( ( !supports2DTransforms && !supports3DTransforms ) || !supportsClassList ) {
 			document.body.setAttribute( 'class', 'no-transforms' );
 
-			// If the browser doesn't support transforms we won't be 
+			// If the browser doesn't support core features we won't be 
 			// using JavaScript to control the presentation
 			return;
 		}
@@ -79,18 +86,31 @@ var Reveal = (function(){
 		dom.controlsUp = document.querySelector( '#reveal .controls .up' );
 		dom.controlsDown = document.querySelector( '#reveal .controls .down' );
 
-		// Bind all view events
-		document.addEventListener( 'keydown', onDocumentKeyDown, false );
-		document.addEventListener( 'touchstart', onDocumentTouchStart, false );
-		window.addEventListener( 'hashchange', onWindowHashChange, false );
-		dom.controlsLeft.addEventListener( 'click', preventAndForward( navigateLeft ), false );
-		dom.controlsRight.addEventListener( 'click', preventAndForward( navigateRight ), false );
-		dom.controlsUp.addEventListener( 'click', preventAndForward( navigateUp ), false );
-		dom.controlsDown.addEventListener( 'click', preventAndForward( navigateDown ), false );
+		addEventListeners();
 
 		// Copy options over to our config object
 		extend( config, options );
 
+		// Updates the presentation to match the current configuration values
+		configure();
+
+		// Read the initial hash
+		readURL();
+
+		// Set up hiding of the browser address bar
+		if( navigator.userAgent.match( /(iphone|ipod|android)/i ) ) {
+			// Give the page some scrollable overflow
+			document.documentElement.style.overflow = 'scroll';
+			document.body.style.height = '120%';
+
+			// Events that should trigger the address bar to hide
+			window.addEventListener( 'load', removeAddressBar, false );
+			window.addEventListener( 'orientationchange', removeAddressBar, false );
+		}
+		
+	}
+
+	function configure() {
 		// Fall back on the 2D transform theme 'linear'
 		if( supports3DTransforms === false ) {
 			config.transition = 'linear';
@@ -121,20 +141,32 @@ var Reveal = (function(){
 			// Add some 3D magic to our anchors
 			linkify();
 		}
+	}
 
-		// Read the initial hash
-		readURL();
+	function addEventListeners() {
+		document.addEventListener( 'keydown', onDocumentKeyDown, false );
+		document.addEventListener( 'touchstart', onDocumentTouchStart, false );
+		document.addEventListener( 'touchmove', onDocumentTouchMove, false );
+		document.addEventListener( 'touchend', onDocumentTouchEnd, false );
+		window.addEventListener( 'hashchange', onWindowHashChange, false );
+		
+		dom.controlsLeft.addEventListener( 'click', preventAndForward( navigateLeft ), false );
+		dom.controlsRight.addEventListener( 'click', preventAndForward( navigateRight ), false );
+		dom.controlsUp.addEventListener( 'click', preventAndForward( navigateUp ), false );
+		dom.controlsDown.addEventListener( 'click', preventAndForward( navigateDown ), false );
+	}
 
-		// Set up hiding of the browser address bar
-		if( navigator.userAgent.match( /(iphone|ipod|android)/i ) ) {
-			// Give the page some scrollable overflow
-			document.documentElement.style.overflow = 'scroll';
-			document.body.style.height = '120%';
-
-			// Events that should trigger the address bar to hide
-			window.addEventListener( 'load', removeAddressBar, false );
-			window.addEventListener( 'orientationchange', removeAddressBar, false );
-		}
+	function removeEventListeners() {
+		document.removeEventListener( 'keydown', onDocumentKeyDown, false );
+		document.removeEventListener( 'touchstart', onDocumentTouchStart, false );
+		document.removeEventListener( 'touchmove', onDocumentTouchMove, false );
+		document.removeEventListener( 'touchend', onDocumentTouchEnd, false );
+		window.removeEventListener( 'hashchange', onWindowHashChange, false );
+		
+		dom.controlsLeft.removeEventListener( 'click', preventAndForward( navigateLeft ), false );
+		dom.controlsRight.removeEventListener( 'click', preventAndForward( navigateRight ), false );
+		dom.controlsUp.removeEventListener( 'click', preventAndForward( navigateUp ), false );
+		dom.controlsDown.removeEventListener( 'click', preventAndForward( navigateDown ), false );
 	}
 
 	/**
@@ -145,6 +177,20 @@ var Reveal = (function(){
 		for( var i in b ) {
 			a[ i ] = b[ i ];
 		}
+	}
+
+	/**
+	 * Measures the distance in pixels between point a
+	 * and point b. 
+	 * 
+	 * @param {Object} a point with x/y properties
+	 * @param {Object} b point with x/y properties
+	 */
+	function distanceBetween( a, b ) {
+		var dx = a.x - b.x,
+			dy = a.y - b.y;
+
+		return Math.sqrt( dx*dx + dy*dy );
 	}
 
 	/**
@@ -224,54 +270,98 @@ var Reveal = (function(){
 		}
 
 	}
-	
+
 	/**
-	 * Handler for the document level 'touchstart' event.
-	 * 
-	 * This enables very basic tap interaction for touch
-	 * devices. Added mainly for performance testing of 3D
-	 * transforms on iOS but was so happily surprised with
-	 * how smoothly it runs so I left it in here. Apple +1
-	 * 
-	 * @param {Object} event
+	 * Handler for the document level 'touchstart' event,
+	 * enables support for swipe and pinch gestures.
 	 */
 	function onDocumentTouchStart( event ) {
-		// We're only interested in one point taps
-		if (event.touches.length === 1) {
-			// Never prevent taps on anchors and images
-			if( event.target.tagName.toLowerCase() === 'a' || event.target.tagName.toLowerCase() === 'img' ) {
-				return;
+		touch.startX = event.touches[0].clientX;
+		touch.startY = event.touches[0].clientY;
+		touch.startCount = event.touches.length;
+
+		// If there's two touches we need to memorize the distance 
+		// between those two points to detect pinching
+		if( event.touches.length === 2 ) {
+			touch.startSpan = distanceBetween( {
+				x: event.touches[1].clientX,
+				y: event.touches[1].clientY
+			}, {
+				x: touch.startX,
+				y: touch.startY
+			} );
+		}
+	}
+	
+	/**
+	 * Handler for the document level 'touchmove' event.
+	 */
+	function onDocumentTouchMove( event ) {
+		// Each touch should only trigger one action
+		if( !touch.handled ) {
+			var currentX = event.touches[0].clientX;
+			var currentY = event.touches[0].clientY;
+
+			// If the touch started off with two points and still has 
+			// two active touches; test for the pinch gesture
+			if( event.touches.length === 2 && touch.startCount === 2 ) {
+
+				// The current distance in pixels between the two touch points
+				var currentSpan = distanceBetween( {
+					x: event.touches[1].clientX,
+					y: event.touches[1].clientY
+				}, {
+					x: touch.startX,
+					y: touch.startY
+				} );
+
+				// If the span is larger than the desire amount we've got 
+				// ourselves a pinch
+				if( Math.abs( touch.startSpan - currentSpan ) > touch.threshold ) {
+					touch.handled = true;
+
+					if( currentSpan < touch.startSpan ) {
+						activateOverview();
+					}
+					else {
+						deactivateOverview();
+					}
+				}
+
 			}
-			
+			// There was only one touch point, look for a swipe
+			else if( event.touches.length === 1 ) {
+				var deltaX = currentX - touch.startX,
+					deltaY = currentY - touch.startY;
+
+				if( deltaX > touch.threshold && Math.abs( deltaX ) > Math.abs( deltaY ) ) {
+					touch.handled = true;
+					navigateLeft();
+				} 
+				else if( deltaX < -touch.threshold && Math.abs( deltaX ) > Math.abs( deltaY ) ) {
+					touch.handled = true;
+					navigateRight();
+				} 
+				else if( deltaY > touch.threshold ) {
+					touch.handled = true;
+					navigateUp();
+				} 
+				else if( deltaY < -touch.threshold ) {
+					touch.handled = true;
+					navigateDown();
+				}
+			}
+
 			event.preventDefault();
-			
-			var point = {
-				x: event.touches[0].clientX,
-				y: event.touches[0].clientY
-			};
-			
-			// Define the extent of the areas that may be tapped
-			// to navigate
-			var wt = window.innerWidth * 0.3;
-			var ht = window.innerHeight * 0.3;
-			
-			if( point.x < wt ) {
-				navigateLeft();
-			}
-			else if( point.x > window.innerWidth - wt ) {
-				navigateRight();
-			}
-			else if( point.y < ht ) {
-				navigateUp();
-			}
-			else if( point.y > window.innerHeight - ht ) {
-				navigateDown();
-			}
-			
-			slide();
 		}
 	}
 
+	/**
+	 * Handler for the document level 'touchend' event.
+	 */
+	function onDocumentTouchEnd( event ) {
+		touch.handled = false;
+	}
 
 	/**
 	 * Handles mouse wheel scrolling, throttled to avoid 
@@ -326,6 +416,7 @@ var Reveal = (function(){
 	 * can't be improved.
 	 */
 	function activateOverview() {
+		
 		dom.wrapper.classList.add( 'overview' );
 
 		var horizontalSlides = Array.prototype.slice.call( document.querySelectorAll( HORIZONTAL_SLIDES_SELECTOR ) );
@@ -341,12 +432,12 @@ var Reveal = (function(){
 			hslide.style.msTransform = htransform;
 			hslide.style.OTransform = htransform;
 			hslide.style.transform = htransform;
-
+		
 			if( !hslide.classList.contains( 'stack' ) ) {
 				// Navigate to this slide on click
 				hslide.addEventListener( 'click', onOverviewSlideClicked, true );
 			}
-
+	
 			var verticalSlides = Array.prototype.slice.call( hslide.querySelectorAll( 'section' ) );
 
 			for( var j = 0, len2 = verticalSlides.length; j < len2; j++ ) {
@@ -365,6 +456,7 @@ var Reveal = (function(){
 				// Navigate to this slide on click
 				vslide.addEventListener( 'click', onOverviewSlideClicked, true );
 			}
+			
 		}
 	}
 	
@@ -633,7 +725,7 @@ var Reveal = (function(){
 
 	/**
 	 * Dispatches an event of the specified type from the 
-	 * #reveal DOM element.
+	 * reveal DOM element.
 	 */
 	function dispatchEvent( type, properties ) {
 		var event = document.createEvent( "HTMLEvents", 1, 2 );
@@ -786,6 +878,18 @@ var Reveal = (function(){
 			availableRoutes().down ? navigateDown() : navigateRight();
 		}
 	}
+
+	/**
+	 * Toggles the slide overview mode on and off.
+	 */
+	function toggleOverview() {
+		if( overviewIsActive() ) {
+			deactivateOverview();
+		}
+		else {
+			activateOverview();
+		}
+	}
 	
 	// Expose some methods publicly
 	return {
@@ -795,6 +899,10 @@ var Reveal = (function(){
 		navigateRight: navigateRight,
 		navigateUp: navigateUp,
 		navigateDown: navigateDown,
+		toggleOverview: toggleOverview,
+
+		addEventListeners: addEventListeners,
+		removeEventListeners: removeEventListeners,
 
 		// Forward event binding to the reveal DOM element
 		addEventListener: function( type, listener, useCapture ) {

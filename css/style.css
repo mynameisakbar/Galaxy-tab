@@ -1,0 +1,80 @@
+body{
+	margin:0;
+	padding:0;
+
+}
+
+#wrapper{
+	width:320px;
+	margin:0 auto;
+}
+
+#content-top{
+	height:420px;
+	/*height:100%;*/
+	background:url("../assets/bg.jpg")repeat;
+}
+
+#content-bottom{
+	background-color:black;
+	height:180px;
+}
+
+#logo{
+	width: 136px;
+	margin: 0 auto;
+	padding-top:5px;
+}
+
+#blackboard{
+	background:url("../assets/blackboard.png")no-repeat;
+	height:300px;
+	width:318px;
+	margin:0 auto;
+}
+
+#banner{
+	margin:0 auto;
+	width:284px;
+}
+
+#the-man{
+	position:relative;
+	bottom:165px;
+
+}
+
+#red, #green, #blue{
+	height:60px;
+	width:100%;
+}
+
+#red{
+	background-color:red;
+}
+
+#red a{
+	cursor:hand;
+}
+
+#green{
+	background-color:green;
+}
+
+#blue{
+	background-color:blue;
+}
+
+.contain{
+	overflow: hidden;
+}
+
+.notice-note{
+	position: absolute;
+	top: -137px;
+	right:0px;
+}
+
+#flash-support{
+	margin-top:20px !important;
+}
